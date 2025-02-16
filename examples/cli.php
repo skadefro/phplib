@@ -15,7 +15,7 @@ if (!defined('STDIN') || stream_set_blocking(STDIN, false) !== true) {
     exit(1);
 }
 
-require_once __DIR__ . '/../src/lib.php';
+require_once __DIR__ . '/../src/Client.php';
 use openiap\Client;
 if (Client::load_dotenv() == false) {
     echo "env missing, please create .env file \n";
@@ -40,8 +40,19 @@ try {
         $chunk = \trim(\fread($stream, 64 * 1024));
         switch ($chunk) {
             case 'q':
-                $entities = $client->Query("testphpcollection", []);
+                $entities = $client->Query("entities", []);
                 print_r($entities);
+                break;
+            case 'i':
+                $result = $client->insert_one("entities", (object) ["name" => "testphp", "value" => 123]);
+                print_r($result);
+                break;
+            case 'w':
+                $watchid = $client->watch("entities", "[]", function($event, $event_counter)  {
+                    echo "Watch: " . $event['id'] . ", Operation: " . $event['operation'] . ", " . $event['document']['name'] . "\n";
+                    // echo "Watch: " . $event['id'] . ", Operation: " . $event['operation'] . "\n";
+                });
+                print("Watch ID: $watchid \n");
                 break;
             case 'quit':
                 $client->free();
