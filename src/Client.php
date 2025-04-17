@@ -189,13 +189,44 @@ class Client {
         return true;
     }
     public function enable_tracing($rust_log, $tracing) {
-        print_r("enabling tracing with rust_log=$rust_log, tracing=$tracing\n");
+        $this->debug("enabling tracing with rust_log=$rust_log, tracing=$tracing\n");
         $this->ffi->enable_tracing($rust_log, $tracing);
     }
     public function disable_tracing() {
         $this->ffi->disable_tracing();
     }
-
+    public function error($message) {
+        $this->ffi->error($message);
+    }
+    public function info($message) {
+        $this->ffi->info($message);
+    }
+    public function warn($message) {
+        $this->ffi->warn($message);
+    }
+    public function debug($message) {
+        $this->ffi->debug($message);
+    }
+    public function trace($message) {
+        $this->ffi->trace($message);
+    }
+    // void set_f64_observable_gauge(const char *name, double value, const char *description);
+    public function set_f64_observable_gauge($name, $value, $description) {
+        $this->ffi->set_f64_observable_gauge($name, $value, $description);
+    }
+    // void set_u64_observable_gauge(const char *name, uint64_t value, const char *description);
+    public function set_u64_observable_gauge($name, $value, $description) {
+        $this->ffi->set_u64_observable_gauge($name, $value, $description);
+    }    
+    // void set_i64_observable_gauge(const char *name, int64_t value, const char *description);
+    public function set_i64_observable_gauge($name, $value, $description) {
+        $this->ffi->set_i64_observable_gauge($name, $value, $description);
+    }    
+    // void disable_observable_gauge(const char *name);
+    public function disable_observable_gauge($name) {
+        $this->ffi->disable_observable_gauge($name);
+    }
+    
     private function set_agent_name($agent_name) {
         $this->ffi->client_set_agent_name($this->client, $agent_name);
     }
@@ -1889,6 +1920,30 @@ class Client {
         if (isset($options['replyto'])) FFI::free($reply_str);
         if (isset($options['routingkey'])) FFI::free($routing_str);
         if (isset($options['exchangename'])) FFI::free($exchange_str);
+    }
+
+    public function custom_command($command) {
+        $request = $this->ffi->new('struct CustomCommandRequestWrapper');
+        $cmd_str = $this->ffi->new("char[" . strlen($command) . "+1]", false);
+        FFI::memcpy($cmd_str, $command, strlen($command));
+        $request->command = FFI::cast("char *", FFI::addr($cmd_str));
+        $request->id = null;
+        $request->name = null;
+        $request->data = null;
+        $request->request_id = 0;
+        $response = $this->ffi->custom_command($this->client, FFI::addr($request));
+        FFI::free($cmd_str);
+        if (!$response->success) {
+            $error_message = FFI::string($response->error);
+            $this->ffi->free_custom_command_response($response);
+            throw new Exception($error_message);
+        }
+        $result = null;
+        if ($response->result) {
+            $result = FFI::string($response->result);
+        }
+        $this->ffi->free_custom_command_response($response);
+        return $result;
     }
 
 }

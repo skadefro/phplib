@@ -60,6 +60,29 @@ typedef struct QueryRequestWrapper {
 typedef void (*QueryCallback)(struct QueryResponseWrapper *wrapper);
 
 /**
+ * CustomCommandResponseWrapper is a C-compatible wrapper for CustomCommandResponse.
+ */
+typedef struct CustomCommandResponseWrapper {
+  bool success;
+  const char *result;
+  const char *error;
+  int32_t request_id;
+} CustomCommandResponseWrapper;
+
+/**
+ * CustomCommandRequestWrapper is a C-compatible wrapper for CustomCommandRequest.
+ */
+typedef struct CustomCommandRequestWrapper {
+  const char *command;
+  const char *id;
+  const char *name;
+  const char *data;
+  int32_t request_id;
+} CustomCommandRequestWrapper;
+
+typedef void (*CustomCommandCallback)(struct CustomCommandResponseWrapper *wrapper);
+
+/**
  * A wrapper for the client library.
  * This struct is used to hold the client instance and the runtime instance.
  */
@@ -585,6 +608,24 @@ typedef struct RpcResponseWrapper {
 
 typedef void (*RpcResponseCallback)(struct RpcResponseWrapper*);
 
+void error(const char *message);
+
+void info(const char *message);
+
+void warn(const char *message);
+
+void debug(const char *message);
+
+void trace(const char *message);
+
+void set_f64_observable_gauge(const char *name, double value, const char *description);
+
+void set_u64_observable_gauge(const char *name, uint64_t value, const char *description);
+
+void set_i64_observable_gauge(const char *name, int64_t value, const char *description);
+
+void disable_observable_gauge(const char *name);
+
 /**
  * Return currentlly signed in user
  */
@@ -603,6 +644,15 @@ void query_async(struct ClientWrapper *client,
                  QueryCallback callback);
 
 void free_query_response(struct QueryResponseWrapper *response);
+
+struct CustomCommandResponseWrapper *custom_command(struct ClientWrapper *client,
+                                                    struct CustomCommandRequestWrapper *options);
+
+void custom_command_async(struct ClientWrapper *client,
+                          struct CustomCommandRequestWrapper *options,
+                          CustomCommandCallback callback);
+
+void free_custom_command_response(struct CustomCommandResponseWrapper *response);
 
 void enable_tracing(const char *rust_log, const char *tracing);
 
