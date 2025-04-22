@@ -230,7 +230,9 @@ class Client {
     private function set_agent_name($agent_name) {
         $this->ffi->client_set_agent_name($this->client, $agent_name);
     }
-
+    private function set_default_timeout($timeout) {
+        $this->ffi->client_set_default_timeout($this->client, $timeout);
+    }
     private function set_agent_version($agent_version) {
         $this->ffi->client_set_agent_version($this->client, $agent_version);
     }
@@ -1784,7 +1786,7 @@ class Client {
         $this->ffi->free_queue_message_response($response);
     }
 
-    public function rpc($queuename, $payload, $options = array()) {
+    public function rpc($queuename, $payload, $options = array(), $timeout = -1) {
         $request = $this->ffi->new('struct QueueMessageRequestWrapper');
         
         // Set queuename
@@ -1828,7 +1830,7 @@ class Client {
         $request->request_id = 0;
 
         // Make the RPC call
-        $response = $this->ffi->rpc($this->client, FFI::addr($request));
+        $response = $this->ffi->rpc($this->client, FFI::addr($request), $timeout);
 
         // Free allocated memory
         FFI::free($queuename_str);
@@ -1853,7 +1855,7 @@ class Client {
         return $result;
     }
 
-    public function rpc_async($queuename, $payload, $callback, $options = array()) {
+    public function rpc_async($queuename, $payload, $callback, $options = array(), $timeout = -1) {
         $request = $this->ffi->new('struct QueueMessageRequestWrapper');
         
         // Set queuename
@@ -1911,7 +1913,7 @@ class Client {
         };
 
         // Make the RPC async call
-        $this->ffi->rpc_async($this->client, FFI::addr($request), $c_callback);
+        $this->ffi->rpc_async($this->client, FFI::addr($request), $c_callback, $timeout);
 
         // Free allocated memory
         FFI::free($queuename_str);
@@ -1922,17 +1924,35 @@ class Client {
         if (isset($options['exchangename'])) FFI::free($exchange_str);
     }
 
-    public function custom_command($command) {
+    public function custom_command($command, $options = array(), $timeout = -1) {
         $request = $this->ffi->new('struct CustomCommandRequestWrapper');
         $cmd_str = $this->ffi->new("char[" . strlen($command) . "+1]", false);
         FFI::memcpy($cmd_str, $command, strlen($command));
         $request->command = FFI::cast("char *", FFI::addr($cmd_str));
         $request->id = null;
+        if (isset($options['id'])) {
+            $id_str = $this->ffi->new("char[" . strlen($options['id']) + 1 . "]", false);
+            FFI::memcpy($id_str, $options['id'], strlen($options['id']));
+            $request->id = FFI::cast("char *", FFI::addr($id_str));
+        }
         $request->name = null;
+        if (isset($options['name'])) {
+            $name_str = $this->ffi->new("char[" . strlen($options['name']) + 1 . "]", false);
+            FFI::memcpy($name_str, $options['name'], strlen($options['name']));
+            $request->name = FFI::cast("char *", FFI::addr($name_str));
+        }
         $request->data = null;
+        if (isset($options['data'])) {
+            $data_str = $this->ffi->new("char[" . strlen($options['data']) + 1 . "]", false);
+            FFI::memcpy($data_str, $options['data'], strlen($options['data']));
+            $request->data = FFI::cast("char *", FFI::addr($data_str));
+        }
         $request->request_id = 0;
-        $response = $this->ffi->custom_command($this->client, FFI::addr($request));
+        $response = $this->ffi->custom_command($this->client, FFI::addr($request), $timeout);
         FFI::free($cmd_str);
+        if (isset($options['id'])) FFI::free($id_str);
+        if (isset($options['name'])) FFI::free($name_str);
+        if (isset($options['data'])) FFI::free($data_str);
         if (!$response->success) {
             $error_message = FFI::string($response->error);
             $this->ffi->free_custom_command_response($response);
@@ -1945,6 +1965,52 @@ class Client {
         $this->ffi->free_custom_command_response($response);
         return $result;
     }
+    /**
+     * Invoke OpenRPA workflow via native invoke_openrpa FFI call.
+     * @param string $robotid
+     * @param string $workflowid
+     * @param array $data
+     * @param int $timeout
+     * @return mixed
+     * @throws Exception
+     */
+    public function invoke_openrpa($robotid, $workflowid, $data = [], $timeout = -1) {
+        $request = $this->ffi->new('struct InvokeOpenRPARequestWrapper');
+        // Set robotid
+        $robotid_str = $this->ffi->new("char[" . strlen($robotid) + 1 . "]", false);
+        FFI::memcpy($robotid_str, $robotid, strlen($robotid));
+        $request->robotid = FFI::cast("char *", FFI::addr($robotid_str));
+        // Set workflowid
+        $workflowid_str = $this->ffi->new("char[" . strlen($workflowid) + 1 . "]", false);
+        FFI::memcpy($workflowid_str, $workflowid, strlen($workflowid));
+        $request->workflowid = FFI::cast("char *", FFI::addr($workflowid_str));
+        // Set payload
+        $payload = json_encode($data);
+        $payload_str = $this->ffi->new("char[" . strlen($payload) + 1 . "]", false);
+        FFI::memcpy($payload_str, $payload, strlen($payload));
+        $request->payload = FFI::cast("char *", FFI::addr($payload_str));
+        // Set rpc to false (or true if you want RPC behavior)
+        $request->rpc = false;
+        $request->request_id = 0;
 
+        $response = $this->ffi->invoke_openrpa($this->client, FFI::addr($request), $timeout);
+
+        // Free allocated memory
+        FFI::free($robotid_str);
+        FFI::free($workflowid_str);
+        FFI::free($payload_str);
+
+        if (!$response->success) {
+            $error_message = FFI::string($response->error);
+            $this->ffi->free_invoke_openrpa_response($response);
+            throw new Exception($error_message);
+        }
+        $result = null;
+        if ($response->result) {
+            $result = FFI::string($response->result);
+        }
+        $this->ffi->free_invoke_openrpa_response($response);
+        return $result;
+    }
 }
 
